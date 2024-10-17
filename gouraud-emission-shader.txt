@@ -1,0 +1,74 @@
+Shader "Custom/GouraudEmission" {
+    Properties {
+        _Color ("Color", Color) = (1,1,1,1)
+        _MainTex ("Albedo (RGB)", 2D) = "white" {}
+        _EmissionMap ("Emission Map", 2D) = "black" {}
+        _EmissionColor ("Emission Color", Color) = (0,0,0,1)
+        _EmissionIntensity ("Emission Intensity", Range(0,10)) = 1.0
+        _EmissionUVSet ("Emission UV Set", Range(0,1)) = 0.0
+        _Glossiness ("Smoothness", Range(0,1)) = 0.5
+        _Metallic ("Metallic", Range(0,1)) = 0.0
+    }
+    SubShader {
+        Tags { "RenderType"="Opaque" }
+        LOD 200
+
+        CGPROGRAM
+        #pragma surface surf GouraudSpecular fullforwardshadows
+        #pragma target 3.0
+
+        fixed4 _Color;
+        sampler2D _MainTex;
+        sampler2D _EmissionMap;
+        fixed4 _EmissionColor;
+        float _EmissionIntensity;
+        float _EmissionUVSet;
+        half _Glossiness;
+        half _Metallic;
+
+        struct Input {
+            float2 uv_MainTex;
+            float2 uv2_MainTex; // Second UV channel
+            float2 uv_EmissionMap;
+            float2 uv2_EmissionMap; // Second UV channel for emission
+        };
+
+        // Custom lighting function for Gouraud shading
+        inline fixed4 LightingGouraudSpecular(SurfaceOutput s, fixed3 lightDir, half3 viewDir, fixed atten) {
+            float nl = max(0, dot(s.Normal, lightDir));
+            float3 h = normalize(lightDir + viewDir);
+            float nh = max(0, dot(s.Normal, h));
+            
+            // Specular term
+            float spec = pow(nh, s.Specular * 128.0);
+            fixed4 c;
+            
+            // Calculate final color including specular
+            c.rgb = s.Albedo * _LightColor0.rgb * (nl * atten) + 
+                    _LightColor0.rgb * spec * _Glossiness;
+            c.a = s.Alpha;
+            
+            return c;
+        }
+
+        void surf (Input IN, inout SurfaceOutput o) {
+            // Sample main texture and apply color
+            fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
+            o.Albedo = c.rgb;
+            
+            // Choose UV set for emission map based on slider
+            float2 emissionUV = lerp(IN.uv_EmissionMap, IN.uv2_EmissionMap, round(_EmissionUVSet));
+            
+            // Sample emission map using selected UV set
+            fixed4 emission = tex2D(_EmissionMap, emissionUV) * _EmissionColor;
+            o.Emission = emission.rgb * _EmissionIntensity;
+            
+            // Set material properties
+            o.Specular = _Glossiness;
+            o.Gloss = _Metallic;
+            o.Alpha = c.a;
+        }
+        ENDCG
+    }
+    FallBack "Diffuse"
+}
